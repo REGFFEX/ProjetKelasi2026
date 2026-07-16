@@ -1,0 +1,129 @@
+'use client';
+
+import { Menu, Bell, Search, X } from 'lucide-react';
+import { useApp } from '@/lib/app-context';
+import { roleLabels } from '@/lib/navigation';
+import { schools } from '@/lib/mock-data';
+import { useState } from 'react';
+import Link from 'next/link';
+import { cn } from '@/lib/utils';
+
+export function Header() {
+  const { setSidebarOpen, role, schoolId } = useApp();
+  const school = schools.find(s => s.id === schoolId);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  return (
+    <>
+      <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border glass px-4 lg:px-6">
+        {/* Mobile menu — opens full sidebar */}
+        <button
+          className="lg:hidden p-2 -ml-1 text-foreground rounded-lg hover:bg-muted/50 transition-colors"
+          onClick={() => setSidebarOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
+        {/* School name — mobile */}
+        <div className="lg:hidden flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate">{school?.nom}</p>
+        </div>
+
+        {/* Search — desktop */}
+        <div className="hidden md:flex items-center gap-2 flex-1 max-w-md">
+          <div className="relative w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Rechercher un élève, une classe..."
+              className="w-full rounded-xl border border-input bg-muted/30 pl-10 pr-3 py-2.5 text-sm focus:border-primary focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/15 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Search icon — mobile */}
+        <button
+          className="md:hidden p-2 rounded-lg hover:bg-muted/50 transition-colors"
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search className="h-5 w-5 text-foreground" />
+        </button>
+
+        {/* Right side */}
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="hidden sm:inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+            {roleLabels[role]}
+          </span>
+
+          {/* Notifications */}
+          <div className="relative">
+            <button
+              className="relative p-2 rounded-xl hover:bg-muted/50 transition-colors"
+              onClick={() => setNotifOpen(!notifOpen)}
+            >
+              <Bell className="h-5 w-5 text-foreground" />
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background" />
+            </button>
+            {notifOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setNotifOpen(false)} />
+                <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-popover shadow-xl animate-scale-in overflow-hidden">
+                  <div className="p-4 border-b border-border">
+                    <p className="font-semibold text-sm">Notifications</p>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto scrollbar-thin">
+                    {[
+                      { msg: 'Paiement reçu — Aimé Mukendi', time: 'Il y a 2h', color: 'bg-success' },
+                      { msg: 'Absence non justifiée — Béatrice Kabongo', time: 'Il y a 3h', color: 'bg-destructive' },
+                      { msg: 'Nouvel élève inscrit — Christian Mwamba', time: 'Hier', color: 'bg-info' },
+                      { msg: 'Réunion parents-professeurs le 25/10', time: 'Hier', color: 'bg-warning' },
+                    ].map((n, i) => (
+                      <div key={i} className="flex gap-3 p-3 border-b border-border last:border-0 hover:bg-muted/50 transition-colors cursor-pointer">
+                        <span className={cn('h-2 w-2 rounded-full mt-1.5 shrink-0', n.color)} />
+                        <div className="min-w-0">
+                          <p className="text-sm text-foreground truncate-2">{n.msg}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{n.time}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Link href="/communication" onClick={() => setNotifOpen(false)} className="block p-3 text-center text-sm text-primary hover:bg-muted/50 transition-colors">
+                    Voir tout
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Avatar */}
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-info/15 text-primary text-sm font-semibold ring-2 ring-border/50 shrink-0">
+            JK
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile search overlay */}
+      {searchOpen && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm animate-fade-in" onClick={() => setSearchOpen(false)}>
+          <div className="p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Rechercher..."
+                  className="w-full rounded-xl border border-input bg-card pl-10 pr-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15 transition-all"
+                />
+              </div>
+              <button onClick={() => setSearchOpen(false)} className="p-2.5 rounded-xl hover:bg-muted/50 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
