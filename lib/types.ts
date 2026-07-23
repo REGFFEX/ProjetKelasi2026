@@ -13,6 +13,7 @@ export interface User {
   schoolId: string | null;
   nom: string;
   email: string;
+  password: string;
   telephone: string;
   role: Role;
   statut: 'actif' | 'inactif';

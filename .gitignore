@@ -34,3 +34,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Ignorer tout le dossier kelasidocsup
+/kelasidocsup/
+
+# Ignorer tout le dossier Kelasimaindoc
+/Kelasimaindoc/

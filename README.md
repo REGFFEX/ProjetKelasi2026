@@ -16,13 +16,37 @@
 - **Animations**: `fade-in`, `slide-up`, `scale-in`, `slide-in-right` avec courbes `cubic-bezier(0.16, 1, 0.3, 1)`
 - **Interactions**: `active:scale-[0.97]` sur boutons (effet tactile iOS), `hover:-translate-y-0.5` sur cartes
 
+## Comptes utilisateurs de démonstration
+
+| Rôle | Nom | Email | Mot de passe |
+|---|---|---|---|
+| Admin école | Joseph Kabasele | joseph.kabasele@kelasi.com | Admin@2026 |
+| Secrétaire | Marie Kalala | marie.kalala@kelasi.com | Secret@2026 |
+| Comptable | Pierre Mbuyi | pierre.mbuyi@kelasi.com | Compta@2026 |
+| Enseignant | Esther Tshala | esther.tshala@kelasi.com | Prof@2026 |
+| Parent | Jean Mukendi | jean.mukendi@kelasi.com | Parent@2026 |
+
+## Données mock enrichies
+
+- **50 élèves** répartis sur 5 classes (6ème A, 5ème A, 4ème A, 3ème A, 6ème B)
+- **15 parents** avec professions et adresses variées
+- **5 enseignants** avec matières et classes assignées
+- **9 matières** avec coefficients
+- **12 évaluations** (devoirs, interrogations, TP, examens)
+- **~130 notes** générées avec statuts de validation (brouillon, validé, publié)
+- **50 factures** avec statuts variés (payé, partiel, impayé)
+- **~20 paiements** avec 4 modes (espèces, mobile money, virement, chèque)
+- **50 enregistrements de présence** (présent, absent, retard, justifié)
+- **10 notifications** et **6 annonces** avec types et canaux variés
+- **2 écoles**, **2 années scolaires**, **3 trimestres**
+
 ## État d'avancement
 
 ### Terminé (Frontend MVP + V1.1)
 
 | Module | Pages | Statut |
 |---|---|---|
-| Authentification | `/` (login avec sélection de rôle) | ✅ |
+| Authentification | `/` (login avec sélection de rôle), `/signup` (création de compte en 2 étapes) | ✅ |
 | Dashboard | `/dashboard` (8 cartes indicateurs, 4 graphiques, actions rapides, fil d'activité) | ✅ |
 | Élèves | `/students` (liste filtrable + import CSV), `/students/[id]` (fiche complète), `/students/new`, `/students/[id]/edit` | ✅ |
 | Parents | `/parents` (cartes avec contact + enfants liés) | ✅ |
@@ -35,7 +59,7 @@
 | Communication | `/communication` (annonces + notifications, formulaire de publication) | ✅ |
 | Paramètres | `/settings` (établissement, utilisateurs, années scolaires, sécurité) | ✅ |
 
-**16 pages compilées avec succès. Build: `npm run build` → ✓**
+**17 pages compilées avec succès. Build: `npm run build` → ✓**
 
 **Design upgrade final appliqué:**
 - iOS-style cards avec ombres douces et coins arrondis (`rounded-2xl`)

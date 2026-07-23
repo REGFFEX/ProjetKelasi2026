@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { GraduationCap, Mail, Lock, ArrowRight, Shield, UserCog, Calculator, BookOpen, Users, CheckCircle2 } from 'lucide-react';
 import type { Role } from '@/lib/types';
 import { roleLabels } from '@/lib/navigation';
@@ -167,9 +168,9 @@ export default function LoginPage() {
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Pas encore de compte?{' '}
-            <button className="text-primary hover:underline font-medium">
-              Contacter Digitech
-            </button>
+            <Link href="/signup" className="text-primary hover:underline font-medium">
+              Créer un compte
+            </Link>
           </p>
         </div>
       </div>
