@@ -35,8 +35,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Ignorer tout le dossier kelasidocsup
-/kelasidocsup/
+# temporary files
+~$*
 
-# Ignorer tout le dossier Kelasimaindoc
-/Kelasimaindoc/

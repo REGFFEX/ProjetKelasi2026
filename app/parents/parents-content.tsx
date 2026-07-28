@@ -1,22 +1,56 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, Plus, Phone, Mail, MapPin, Users, Briefcase } from 'lucide-react';
-import { parents, students, getStudentName } from '@/lib/mock-data';
+import { Search, Plus, Phone, Mail, MapPin, Users, Briefcase, Loader2 } from 'lucide-react';
+import { fetchParents, fetchStudents, fetchAllStudentParents } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 export function ParentsContent() {
+  const [loading, setLoading] = useState(true);
+  const [parents, setParents] = useState<Awaited<ReturnType<typeof fetchParents>>>([]);
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof fetchStudents>>>([]);
+  const [studentParents, setStudentParents] = useState<{ id: string; school_id: string; student_id: string; parent_id: string }[]>([]);
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [p, s, sp] = await Promise.all([
+          fetchParents(),
+          fetchStudents(),
+          fetchAllStudentParents(),
+        ]);
+        if (cancelled) return;
+        setParents(p);
+        setStudents(s);
+        setStudentParents(sp);
+      } catch (e) {
+        console.error('Failed to load parents data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = useMemo(() => {
     return parents.filter(p =>
       p.nom.toLowerCase().includes(search.toLowerCase()) ||
       p.telephone.includes(search)
     );
-  }, [search]);
+  }, [search, parents]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
@@ -42,7 +76,10 @@ export function ParentsContent() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {filtered.map(p => {
-          const children = students.filter(s => p.studentIds.includes(s.id));
+          const childIds = studentParents
+            .filter(sp => sp.parent_id === p.id)
+            .map(sp => sp.student_id);
+          const children = students.filter(s => childIds.includes(s.id));
           return (
             <Card
               key={p.id}
@@ -85,7 +122,7 @@ export function ParentsContent() {
                       href={`/students/${c.id}`}
                       className="badge-modern inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors active:scale-95"
                     >
-                      {getStudentName(c.id)}
+                      {c.prenom} {c.nom}
                     </Link>
                   ))}
                 </div>

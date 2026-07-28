@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { GraduationCap, Mail, Lock, ArrowRight, Shield, UserCog, Calculator, BookOpen, Users, CheckCircle2 } from 'lucide-react';
+import { GraduationCap, Mail, Lock, ArrowRight, Shield, UserCog, Calculator, BookOpen, Users, CheckCircle2, Loader2 } from 'lucide-react';
 import type { Role } from '@/lib/types';
 import { roleLabels } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 
 const roleIcons: Record<Role, typeof Shield> = {
   super_admin: Shield,
@@ -21,13 +22,29 @@ const roles: Role[] = ['school_admin', 'secretary', 'accountant', 'teacher', 'pa
 
 export default function LoginPage() {
   const router = useRouter();
+  const { signIn, session } = useAuth();
   const [selectedRole, setSelectedRole] = useState<Role>('school_admin');
-  const [email, setEmail] = useState('joseph.kabasele@kelasi.com');
-  const [password, setPassword] = useState('kelasi2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (session) router.replace('/dashboard');
+  }, [session, router]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push('/dashboard');
+    setError('');
+    setLoading(true);
+    const { error: signInError } = await signIn(email, password);
+    if (signInError) {
+      setError(signInError);
+      setLoading(false);
+    } else {
+      router.push('/dashboard');
+    }
   };
 
   return (
@@ -142,6 +159,12 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {error && (
+              <div className="rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive animate-fade-in">
+                {error}
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
                 <input type="checkbox" className="rounded border-input" />
@@ -154,10 +177,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.97] shadow-lg shadow-primary/20"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.97] shadow-lg shadow-primary/20 disabled:opacity-60"
             >
-              Se connecter
-              <ArrowRight className="h-4 w-4" />
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Se connecter <ArrowRight className="h-4 w-4" /></>}
             </button>
           </form>
 

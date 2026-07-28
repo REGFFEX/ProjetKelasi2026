@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { School, Users, Calendar, Save, Upload, Shield, UserCog, Calculator, BookOpen, Mail, Lock, Bell } from 'lucide-react';
-import { schools, users, academicYears } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
+import { School, Users, Calendar, Save, Upload, Shield, UserCog, Calculator, BookOpen, Mail, Lock, Bell, Loader2 } from 'lucide-react';
+import { fetchSchools, fetchUsers, fetchAcademicYears } from '@/lib/api';
 import { roleLabels } from '@/lib/navigation';
 import type { Role } from '@/lib/types';
 import { Card } from '@/components/ui/card';
@@ -32,6 +32,37 @@ const roleIcons: Record<Role, typeof Shield> = {
 
 export function SettingsContent() {
   const [tab, setTab] = useState<Tab>('school');
+  const [loading, setLoading] = useState(true);
+  const [schools, setSchools] = useState<Awaited<ReturnType<typeof fetchSchools>>>([]);
+  const [users, setUsers] = useState<Awaited<ReturnType<typeof fetchUsers>>>([]);
+  const [academicYears, setAcademicYears] = useState<Awaited<ReturnType<typeof fetchAcademicYears>>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, u, y] = await Promise.all([fetchSchools(), fetchUsers(), fetchAcademicYears()]);
+        if (cancelled) return;
+        setSchools(s);
+        setUsers(u as { id: string; school_id: string; nom: string; email: string; telephone: string; role: Role; statut: string }[]);
+        setAcademicYears(y);
+      } catch (e) {
+        console.error('Failed to load settings data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   const school = schools[0];
 
   return (
@@ -60,7 +91,7 @@ export function SettingsContent() {
         })}
       </div>
 
-      {tab === 'school' && (
+      {tab === 'school' && school && (
         <Card className="p-4 sm:p-5 max-w-2xl rounded-2xl shadow-card">
           <h3 className="font-semibold text-foreground mb-4">Informations de l'établissement</h3>
 
@@ -93,17 +124,17 @@ export function SettingsContent() {
               <Label htmlFor="abonnement">Abonnement</Label>
               <div className="mt-1.5">
                 <Badge className={cn('badge-modern',
-                  school.statutAbonnement === 'actif' ? 'bg-success/10 text-success' :
-                  school.statutAbonnement === 'essai' ? 'bg-warning/10 text-warning' :
+                  school.statut_abonnement === 'actif' ? 'bg-success/10 text-success' :
+                  school.statut_abonnement === 'essai' ? 'bg-warning/10 text-warning' :
                   'bg-destructive/10 text-destructive'
                 )}>
-                  {school.statutAbonnement === 'actif' ? 'Actif' : school.statutAbonnement === 'essai' ? 'Essai' : 'Expiré'}
+                  {school.statut_abonnement === 'actif' ? 'Actif' : school.statut_abonnement === 'essai' ? 'Essai' : 'Expiré'}
                 </Badge>
               </div>
             </div>
             <div>
               <Label htmlFor="dateCreation">Date de création</Label>
-              <Input id="dateCreation" defaultValue={new Date(school.dateCreation).toLocaleDateString('fr-FR')} disabled className="mt-1.5" />
+              <Input id="dateCreation" defaultValue={new Date(school.date_creation).toLocaleDateString('fr-FR')} disabled className="mt-1.5" />
             </div>
           </div>
 
@@ -135,13 +166,13 @@ export function SettingsContent() {
               </thead>
               <tbody className="divide-y divide-border">
                 {users.map(u => {
-                  const RoleIcon = roleIcons[u.role];
+                  const RoleIcon = roleIcons[u.role as Role] || Users;
                   return (
                     <tr key={u.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold shrink-0">
-                            {u.nom.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                            {u.nom.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                           </div>
                           <span className="text-sm font-medium text-foreground truncate">{u.nom}</span>
                         </div>
@@ -149,7 +180,7 @@ export function SettingsContent() {
                       <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-[200px]">{u.email}</td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
-                          <RoleIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> <span className="truncate">{roleLabels[u.role]}</span>
+                          <RoleIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> <span className="truncate">{roleLabels[u.role as Role]}</span>
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -182,7 +213,7 @@ export function SettingsContent() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{y.libelle}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {new Date(y.dateDebut).toLocaleDateString('fr-FR')} → {new Date(y.dateFin).toLocaleDateString('fr-FR')}
+                    {new Date(y.date_debut).toLocaleDateString('fr-FR')} → {new Date(y.date_fin).toLocaleDateString('fr-FR')}
                   </p>
                 </div>
                 <Badge className={cn('badge-modern shrink-0', y.statut === 'active' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground')}>

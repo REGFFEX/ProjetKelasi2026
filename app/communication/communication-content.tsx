@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Bell, Megaphone, Send, CheckCircle, Clock, XCircle, Mail, MessageSquare, Smartphone } from 'lucide-react';
-import { announcements, notifications } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
+import { Plus, Bell, Megaphone, Send, CheckCircle, Clock, XCircle, Mail, MessageSquare, Smartphone, Loader2 } from 'lucide-react';
+import { fetchAnnouncements, fetchNotifications } from '@/lib/api';
 import type { AnnouncementTarget, NotificationType } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,35 @@ export function CommunicationContent() {
   const [tab, setTab] = useState<Tab>('announcements');
   const [showForm, setShowForm] = useState(false);
   const [newAnnouncement, setNewAnnouncement] = useState({ titre: '', contenu: '', cible: 'tous' as AnnouncementTarget });
+
+  const [loading, setLoading] = useState(true);
+  const [announcements, setAnnouncements] = useState<Awaited<ReturnType<typeof fetchAnnouncements>>>([]);
+  const [notifications, setNotifications] = useState<Awaited<ReturnType<typeof fetchNotifications>>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [a, n] = await Promise.all([fetchAnnouncements(), fetchNotifications()]);
+        if (cancelled) return;
+        setAnnouncements(a);
+        setNotifications(n);
+      } catch (e) {
+        console.error('Failed to load communication data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
@@ -140,14 +169,14 @@ export function CommunicationContent() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-semibold text-foreground truncate">{a.titre}</h3>
-                    <Badge variant="secondary" className="shrink-0 badge-modern">{targetLabels[a.cible]}</Badge>
+                    <Badge variant="secondary" className="shrink-0 badge-modern">{targetLabels[a.cible as AnnouncementTarget]}</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed line-clamp-3">{a.contenu}</p>
                   <div className="flex items-center gap-2 sm:gap-3 mt-3 text-xs text-muted-foreground">
-                    <span className="truncate">Par {a.auteurNom}</span>
+                    <span className="truncate">Par {a.auteur_nom}</span>
                     <span className="hidden sm:inline">·</span>
-                    <span className="hidden sm:inline truncate">{new Date(a.datePublication).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                    <span className="sm:hidden truncate">{new Date(a.datePublication).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                    <span className="hidden sm:inline truncate">{new Date(a.date_publication).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="sm:hidden truncate">{new Date(a.date_publication).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
                   </div>
                 </div>
               </div>
@@ -159,9 +188,9 @@ export function CommunicationContent() {
       {tab === 'notifications' && (
         <div className="space-y-2 sm:space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin">
           {notifications.map(n => {
-            const cfg = notifTypeConfig[n.type];
-            const canal = canalConfig[n.canal];
-            const statut = statutConfig[n.statut];
+            const cfg = notifTypeConfig[n.type as NotificationType];
+            const canal = canalConfig[n.canal as keyof typeof canalConfig];
+            const statut = statutConfig[n.statut as keyof typeof statutConfig];
             const Icon = cfg.icon;
             const CanalIcon = canal.icon;
             const StatutIcon = statut.icon;

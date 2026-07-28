@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, School, Users, MapPin, GraduationCap, BookOpen, Pencil, Trash2 } from 'lucide-react';
-import { classrooms, students, teachers, subjects, getTeacherName } from '@/lib/mock-data';
+import { Plus, School, Users, MapPin, GraduationCap, BookOpen, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { fetchClassrooms, fetchStudents, fetchTeachers, fetchSubjects } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,48 @@ type Tab = 'classes' | 'subjects';
 
 export function ClassesContent() {
   const [tab, setTab] = useState<Tab>('classes');
+  const [loading, setLoading] = useState(true);
+  const [classrooms, setClassrooms] = useState<Awaited<ReturnType<typeof fetchClassrooms>>>([]);
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof fetchStudents>>>([]);
+  const [teachers, setTeachers] = useState<Awaited<ReturnType<typeof fetchTeachers>>>([]);
+  const [subjects, setSubjects] = useState<Awaited<ReturnType<typeof fetchSubjects>>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [c, s, t, sub] = await Promise.all([
+          fetchClassrooms(),
+          fetchStudents(),
+          fetchTeachers(),
+          fetchSubjects(),
+        ]);
+        if (cancelled) return;
+        setClassrooms(c);
+        setStudents(s);
+        setTeachers(t);
+        setSubjects(sub);
+      } catch (e) {
+        console.error('Failed to load classes data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const getTeacherName = (id: string) => {
+    const t = teachers.find(t => t.id === id);
+    return t ? `${t.prenom} ${t.nom}` : 'Inconnu';
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
@@ -51,7 +93,7 @@ export function ClassesContent() {
       {tab === 'classes' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {classrooms.map(c => {
-            const classStudents = students.filter(s => s.classroomId === c.id);
+            const classStudents = students.filter(s => s.classroom_id === c.id);
             return (
               <Card
                 key={c.id}
@@ -82,7 +124,7 @@ export function ClassesContent() {
                     <Users className="h-3.5 w-3.5 shrink-0" /> {classStudents.length} élève(s)
                   </p>
                   <p className="flex items-center gap-2 text-muted-foreground">
-                    <GraduationCap className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Prof. principal: {c.enseignantPrincipalId ? getTeacherName(c.enseignantPrincipalId) : 'Non assigné'}</span>
+                    <GraduationCap className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Prof. principal: {c.enseignant_principal_id ? getTeacherName(c.enseignant_principal_id) : 'Non assigné'}</span>
                   </p>
                 </div>
 

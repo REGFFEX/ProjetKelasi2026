@@ -1,23 +1,52 @@
 'use client';
 
-import { Menu, Bell, Search, X } from 'lucide-react';
+import { Menu, Bell, Search, X, Loader2 } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
+import { useAuth } from '@/lib/auth-context';
 import { roleLabels } from '@/lib/navigation';
-import { schools } from '@/lib/mock-data';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { fetchNotifications } from '@/lib/api';
+
+interface NotifRow {
+  id: string;
+  message: string;
+  statut: string;
+  type: string;
+  date: string;
+}
 
 export function Header() {
-  const { setSidebarOpen, role, schoolId } = useApp();
-  const school = schools.find(s => s.id === schoolId);
+  const { setSidebarOpen, role } = useApp();
+  const { profile } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotifRow[]>([]);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+
+  const loadNotifs = useCallback(async () => {
+    if (!notifOpen) return;
+    setLoadingNotifs(true);
+    try {
+      const data = await fetchNotifications();
+      setNotifications(data.slice(0, 6));
+    } catch { /* ignore */ }
+    finally { setLoadingNotifs(false); }
+  }, [notifOpen]);
+
+  useEffect(() => { loadNotifs(); }, [loadNotifs]);
+
+  const userInitials = (profile?.nom ?? '?')
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <>
       <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border glass px-4 lg:px-6">
-        {/* Mobile menu — opens full sidebar */}
         <button
           className="lg:hidden p-2 -ml-1 text-foreground rounded-lg hover:bg-muted/50 transition-colors"
           onClick={() => setSidebarOpen(true)}
@@ -25,12 +54,10 @@ export function Header() {
           <Menu className="h-5 w-5" />
         </button>
 
-        {/* School name — mobile */}
         <div className="lg:hidden flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">{school?.nom}</p>
+          <p className="text-sm font-semibold text-foreground truncate">{profile?.nom ?? 'Kelasi'}</p>
         </div>
 
-        {/* Search — desktop */}
         <div className="hidden md:flex items-center gap-2 flex-1 max-w-md">
           <div className="relative w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -42,7 +69,6 @@ export function Header() {
           </div>
         </div>
 
-        {/* Search icon — mobile */}
         <button
           className="md:hidden p-2 rounded-lg hover:bg-muted/50 transition-colors"
           onClick={() => setSearchOpen(true)}
@@ -50,13 +76,11 @@ export function Header() {
           <Search className="h-5 w-5 text-foreground" />
         </button>
 
-        {/* Right side */}
         <div className="flex items-center gap-2 ml-auto">
           <span className="hidden sm:inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             {roleLabels[role]}
           </span>
 
-          {/* Notifications */}
           <div className="relative">
             <button
               className="relative p-2 rounded-xl hover:bg-muted/50 transition-colors"
@@ -73,20 +97,27 @@ export function Header() {
                     <p className="font-semibold text-sm">Notifications</p>
                   </div>
                   <div className="max-h-80 overflow-y-auto scrollbar-thin">
-                    {[
-                      { msg: 'Paiement reçu — Aimé Mukendi', time: 'Il y a 2h', color: 'bg-success' },
-                      { msg: 'Absence non justifiée — Béatrice Kabongo', time: 'Il y a 3h', color: 'bg-destructive' },
-                      { msg: 'Nouvel élève inscrit — Christian Mwamba', time: 'Hier', color: 'bg-info' },
-                      { msg: 'Réunion parents-professeurs le 25/10', time: 'Hier', color: 'bg-warning' },
-                    ].map((n, i) => (
-                      <div key={i} className="flex gap-3 p-3 border-b border-border last:border-0 hover:bg-muted/50 transition-colors cursor-pointer">
-                        <span className={cn('h-2 w-2 rounded-full mt-1.5 shrink-0', n.color)} />
-                        <div className="min-w-0">
-                          <p className="text-sm text-foreground truncate-2">{n.msg}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{n.time}</p>
-                        </div>
+                    {loadingNotifs ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                       </div>
-                    ))}
+                    ) : notifications.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">Aucune notification</p>
+                    ) : (
+                      notifications.map(n => (
+                        <div key={n.id} className="flex gap-3 p-3 border-b border-border last:border-0 hover:bg-muted/50 transition-colors cursor-pointer">
+                          <span className={cn('h-2 w-2 rounded-full mt-1.5 shrink-0',
+                            n.type === 'paiement' ? 'bg-success' :
+                            n.type === 'absence' ? 'bg-destructive' :
+                            n.type === 'annonce' ? 'bg-warning' : 'bg-info'
+                          )} />
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground truncate-2">{n.message}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{new Date(n.date).toLocaleDateString('fr-FR')}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                   <Link href="/communication" onClick={() => setNotifOpen(false)} className="block p-3 text-center text-sm text-primary hover:bg-muted/50 transition-colors">
                     Voir tout
@@ -96,14 +127,12 @@ export function Header() {
             )}
           </div>
 
-          {/* Avatar */}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-info/15 text-primary text-sm font-semibold ring-2 ring-border/50 shrink-0">
-            JK
+            {userInitials}
           </div>
         </div>
       </header>
 
-      {/* Mobile search overlay */}
       {searchOpen && (
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm animate-fade-in" onClick={() => setSearchOpen(false)}>
           <div className="p-4" onClick={e => e.stopPropagation()}>

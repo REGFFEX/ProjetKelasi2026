@@ -1,13 +1,48 @@
 'use client';
 
-import { Plus, Mail, Phone, BookOpen, School, CheckCircle2, XCircle } from 'lucide-react';
-import { teachers, subjects, classrooms, getSubjectName, getClassroomName } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
+import { Plus, Mail, Phone, BookOpen, School, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { fetchTeachers, fetchSubjects, fetchClassrooms } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 export function TeachersContent() {
+  const [loading, setLoading] = useState(true);
+  const [teachers, setTeachers] = useState<Awaited<ReturnType<typeof fetchTeachers>>>([]);
+  const [subjects, setSubjects] = useState<Awaited<ReturnType<typeof fetchSubjects>>>([]);
+  const [classrooms, setClassrooms] = useState<Awaited<ReturnType<typeof fetchClassrooms>>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [t, s, c] = await Promise.all([fetchTeachers(), fetchSubjects(), fetchClassrooms()]);
+        if (cancelled) return;
+        setTeachers(t);
+        setSubjects(s);
+        setClassrooms(c);
+      } catch (e) {
+        console.error('Failed to load teachers data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const getSubjectName = (id: string) => subjects.find(s => s.id === id)?.nom || 'Inconnu';
+  const getClassroomName = (id: string) => classrooms.find(c => c.id === id)?.nom || 'Inconnu';
+
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -57,7 +92,7 @@ export function TeachersContent() {
                   <BookOpen className="h-3.5 w-3.5" /> Matières
                 </p>
                 <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto scrollbar-thin">
-                  {t.matiereIds.map(id => (
+                  {t.matiere_ids.map(id => (
                     <Badge key={id} variant="secondary" className="badge-modern text-xs">{getSubjectName(id)}</Badge>
                   ))}
                 </div>
@@ -67,7 +102,7 @@ export function TeachersContent() {
                   <School className="h-3.5 w-3.5" /> Classes
                 </p>
                 <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto scrollbar-thin">
-                  {t.classroomIds.map(id => (
+                  {t.classroom_ids.map(id => (
                     <Badge key={id} variant="outline" className="badge-modern text-xs">{getClassroomName(id)}</Badge>
                   ))}
                 </div>

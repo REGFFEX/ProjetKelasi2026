@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { ClipboardList, Plus, Eye, CheckCircle, Clock, FileText, Download, Send, ArrowLeft, Save } from 'lucide-react';
-import { assessments, subjects, classrooms, students, grades, getSubjectName, getClassroomName, terms } from '@/lib/mock-data';
+import { useState, useEffect, useMemo } from 'react';
+import { ClipboardList, Plus, Eye, CheckCircle, Clock, FileText, Download, Send, ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { fetchAssessments, fetchSubjects, fetchClassrooms, fetchStudents, fetchGrades } from '@/lib/api';
 import type { GradeStatus } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,22 +25,58 @@ export function GradesContent() {
   const [bulletinStudentId, setBulletinStudentId] = useState<string | null>(null);
   const [gradeValues, setGradeValues] = useState<Record<string, string>>({});
 
+  const [loading, setLoading] = useState(true);
+  const [assessments, setAssessments] = useState<Awaited<ReturnType<typeof fetchAssessments>>>([]);
+  const [subjects, setSubjects] = useState<Awaited<ReturnType<typeof fetchSubjects>>>([]);
+  const [classrooms, setClassrooms] = useState<Awaited<ReturnType<typeof fetchClassrooms>>>([]);
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof fetchStudents>>>([]);
+  const [grades, setGrades] = useState<Awaited<ReturnType<typeof fetchGrades>>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [a, s, c, st, g] = await Promise.all([
+          fetchAssessments(),
+          fetchSubjects(),
+          fetchClassrooms(),
+          fetchStudents(),
+          fetchGrades(),
+        ]);
+        if (cancelled) return;
+        setAssessments(a);
+        setSubjects(s);
+        setClassrooms(c);
+        setStudents(st);
+        setGrades(g);
+      } catch (e) {
+        console.error('Failed to load grades data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const getSubjectName = (id: string) => subjects.find(s => s.id === id)?.nom || 'Inconnu';
+  const getClassroomName = (id: string) => classrooms.find(c => c.id === id)?.nom || 'Inconnu';
+
   const filteredAssessments = useMemo(() => {
     return assessments.filter(a => {
-      const matchClass = selectedClassroom === 'all' || a.classroomId === selectedClassroom;
-      const matchSubject = selectedSubject === 'all' || a.subjectId === selectedSubject;
+      const matchClass = selectedClassroom === 'all' || a.classroom_id === selectedClassroom;
+      const matchSubject = selectedSubject === 'all' || a.subject_id === selectedSubject;
       return matchClass && matchSubject;
     });
-  }, [selectedClassroom, selectedSubject]);
+  }, [assessments, selectedClassroom, selectedSubject]);
 
   const handleEnterGrades = (assessmentId: string) => {
     setSelectedAssessment(assessmentId);
     const assessment = assessments.find(a => a.id === assessmentId);
     if (assessment) {
-      const classStudents = students.filter(s => s.classroomId === assessment.classroomId);
+      const classStudents = students.filter(s => s.classroom_id === assessment.classroom_id);
       const existingGrades: Record<string, string> = {};
       classStudents.forEach(s => {
-        const grade = grades.find(g => g.studentId === s.id && g.assessmentId === assessmentId);
+        const grade = grades.find(g => g.student_id === s.id && g.assessment_id === assessmentId);
         if (grade) existingGrades[s.id] = String(grade.note);
       });
       setGradeValues(existingGrades);
@@ -52,6 +88,14 @@ export function GradesContent() {
     setBulletinStudentId(studentId);
     setView('bulletin');
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // ===== LIST VIEW =====
   if (view === 'list') {
@@ -90,11 +134,11 @@ export function GradesContent() {
         {/* Assessments */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {filteredAssessments.map(a => {
-            const subject = subjects.find(s => s.id === a.subjectId);
-            const classroom = classrooms.find(c => c.id === a.classroomId);
-            const classStudents = students.filter(s => s.classroomId === a.classroomId);
-            const assessmentGrades = grades.filter(g => g.assessmentId === a.id);
-            const status = assessmentGrades[0]?.statutValidation || 'brouillon';
+            const subject = subjects.find(s => s.id === a.subject_id);
+            const classroom = classrooms.find(c => c.id === a.classroom_id);
+            const classStudents = students.filter(s => s.classroom_id === a.classroom_id);
+            const assessmentGrades = grades.filter(g => g.assessment_id === a.id);
+            const status = (assessmentGrades[0]?.statut_validation || 'brouillon') as GradeStatus;
             const cfg = statusConfig[status];
             const Icon = cfg.icon;
             const avg = assessmentGrades.length > 0
@@ -114,7 +158,7 @@ export function GradesContent() {
                 </div>
                 <h3 className="font-semibold text-foreground text-sm truncate">{a.libelle}</h3>
                 <div className="mt-2 space-y-1">
-                  <p className="text-xs text-muted-foreground truncate">{getSubjectName(a.subjectId)} · {getClassroomName(a.classroomId)}</p>
+                  <p className="text-xs text-muted-foreground truncate">{getSubjectName(a.subject_id)} · {getClassroomName(a.classroom_id)}</p>
                   <p className="text-xs text-muted-foreground hidden sm:block">Coef. {a.coefficient} · {new Date(a.date).toLocaleDateString('fr-FR')}</p>
                 </div>
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
@@ -152,7 +196,7 @@ export function GradesContent() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{s.prenom} {s.nom}</p>
-                  <p className="text-xs text-muted-foreground truncate hidden sm:block">{getClassroomName(s.classroomId)}</p>
+                  <p className="text-xs text-muted-foreground truncate hidden sm:block">{getClassroomName(s.classroom_id || '')}</p>
                 </div>
               </button>
             ))}
@@ -166,8 +210,7 @@ export function GradesContent() {
   if (view === 'entry' && selectedAssessment) {
     const assessment = assessments.find(a => a.id === selectedAssessment);
     if (!assessment) return null;
-    const classStudents = students.filter(s => s.classroomId === assessment.classroomId);
-    const term = terms.find(t => t.id === assessment.termId);
+    const classStudents = students.filter(s => s.classroom_id === assessment.classroom_id);
 
     return (
       <div className="space-y-5 sm:space-y-6 animate-fade-in">
@@ -177,7 +220,7 @@ export function GradesContent() {
           </Button>
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-foreground truncate">{assessment.libelle}</h1>
-            <p className="text-sm text-muted-foreground truncate hidden sm:block">{getSubjectName(assessment.subjectId)} · {getClassroomName(assessment.classroomId)} · Coef. {assessment.coefficient}</p>
+            <p className="text-sm text-muted-foreground truncate hidden sm:block">{getSubjectName(assessment.subject_id)} · {getClassroomName(assessment.classroom_id)} · Coef. {assessment.coefficient}</p>
           </div>
         </div>
 
@@ -249,30 +292,29 @@ export function GradesContent() {
   if (view === 'bulletin' && bulletinStudentId) {
     const student = students.find(s => s.id === bulletinStudentId);
     if (!student) return null;
-    const studentGrades = grades.filter(g => g.studentId === student.id);
-    const term = terms[0];
+    const studentGrades = grades.filter(g => g.student_id === student.id);
 
     // Group grades by subject
     const gradesBySubject = useMemo(() => {
       const map: Record<string, { grades: typeof studentGrades; total: number; count: number; coef: number }> = {};
       studentGrades.forEach(g => {
-        const assessment = assessments.find(a => a.id === g.assessmentId);
+        const assessment = assessments.find(a => a.id === g.assessment_id);
         if (!assessment) return;
-        if (!map[assessment.subjectId]) {
-          const subject = subjects.find(s => s.id === assessment.subjectId);
-          map[assessment.subjectId] = { grades: [], total: 0, count: 0, coef: subject?.coefficient || 1 };
+        if (!map[assessment.subject_id]) {
+          const subject = subjects.find(s => s.id === assessment.subject_id);
+          map[assessment.subject_id] = { grades: [], total: 0, count: 0, coef: subject?.coefficient || 1 };
         }
-        map[assessment.subjectId].grades.push(g);
-        map[assessment.subjectId].total += g.note * assessment.coefficient;
-        map[assessment.subjectId].count += assessment.coefficient;
+        map[assessment.subject_id].grades.push(g);
+        map[assessment.subject_id].total += g.note * assessment.coefficient;
+        map[assessment.subject_id].count += assessment.coefficient;
       });
       return map;
-    }, [studentGrades]);
+    }, [studentGrades, assessments, subjects]);
 
     const generalAvg = useMemo(() => {
       let totalPoints = 0;
       let totalCoefs = 0;
-      Object.entries(gradesBySubject).forEach(([subjectId, data]) => {
+      Object.entries(gradesBySubject).forEach(([, data]) => {
         const avg = data.count > 0 ? data.total / data.count : 0;
         totalPoints += avg * data.coef;
         totalCoefs += data.coef;
@@ -305,7 +347,7 @@ export function GradesContent() {
               </div>
             </div>
             <h2 className="text-xl font-bold text-foreground mt-4">BULLETIN DE NOTES</h2>
-            <p className="text-sm text-muted-foreground">{term?.libelle} — Année Académique 2026-2027</p>
+            <p className="text-sm text-muted-foreground">— Année Académique 2026-2027</p>
           </div>
 
           {/* Student info */}
@@ -324,7 +366,7 @@ export function GradesContent() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Classe</p>
-              <p className="text-sm font-medium text-foreground truncate">{getClassroomName(student.classroomId)}</p>
+              <p className="text-sm font-medium text-foreground truncate">{getClassroomName(student.classroom_id || '')}</p>
             </div>
           </div>
 
@@ -351,7 +393,7 @@ export function GradesContent() {
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">
                         <p className="truncate-2">
                           {data.grades.map(g => {
-                            const a = assessments.find(a => a.id === g.assessmentId);
+                            const a = assessments.find(a => a.id === g.assessment_id);
                             return a ? `${a.libelle}: ${g.note}/20` : '';
                           }).join(' · ')}
                         </p>

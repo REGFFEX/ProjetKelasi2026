@@ -1,8 +1,21 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Phone, MapPin, Calendar, FileText, GraduationCap, Wallet, CheckSquare, ClipboardList, Download } from 'lucide-react';
-import { getStudentById, getClassroomName, getParentNames, parents, invoices, payments, attendance, grades, assessments, getSubjectName, formatMoney } from '@/lib/mock-data';
+import { ArrowLeft, Pencil, Phone, MapPin, Calendar, FileText, GraduationCap, Wallet, CheckSquare, ClipboardList, Download, Loader2 } from 'lucide-react';
+import {
+  fetchStudentById,
+  fetchStudentParents,
+  fetchStudentDocuments,
+  fetchClassrooms,
+  fetchInvoices,
+  fetchPayments,
+  fetchAttendance,
+  fetchGrades,
+  fetchAssessments,
+  fetchSubjects,
+  formatMoney,
+} from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,24 +36,78 @@ const attendanceLabels: Record<string, string> = {
 };
 
 export function StudentDetailContent({ studentId }: { studentId: string }) {
-  const student = getStudentById(studentId);
+  const [loading, setLoading] = useState(true);
+  const [student, setStudent] = useState<Awaited<ReturnType<typeof fetchStudentById>> | null>(null);
+  const [parents, setParents] = useState<Awaited<ReturnType<typeof fetchStudentParents>>>([]);
+  const [documents, setDocuments] = useState<{ id: string; nom: string; type: string; date_ajout: string }[]>([]);
+  const [classrooms, setClassrooms] = useState<Awaited<ReturnType<typeof fetchClassrooms>>>([]);
+  const [invoices, setInvoices] = useState<Awaited<ReturnType<typeof fetchInvoices>>>([]);
+  const [payments, setPayments] = useState<Awaited<ReturnType<typeof fetchPayments>>>([]);
+  const [attendance, setAttendance] = useState<Awaited<ReturnType<typeof fetchAttendance>>>([]);
+  const [grades, setGrades] = useState<Awaited<ReturnType<typeof fetchGrades>>>([]);
+  const [assessments, setAssessments] = useState<Awaited<ReturnType<typeof fetchAssessments>>>([]);
+  const [subjects, setSubjects] = useState<Awaited<ReturnType<typeof fetchSubjects>>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, p, docs, c, inv, pay, att, g, a, sub] = await Promise.all([
+          fetchStudentById(studentId),
+          fetchStudentParents(studentId),
+          fetchStudentDocuments(studentId),
+          fetchClassrooms(),
+          fetchInvoices(),
+          fetchPayments(),
+          fetchAttendance(),
+          fetchGrades(),
+          fetchAssessments(),
+          fetchSubjects(),
+        ]);
+        if (cancelled) return;
+        setStudent(s);
+        setParents(p);
+        setDocuments(docs as { id: string; nom: string; type: string; date_ajout: string }[]);
+        setClassrooms(c);
+        setInvoices(inv);
+        setPayments(pay);
+        setAttendance(att);
+        setGrades(g);
+        setAssessments(a);
+        setSubjects(sub);
+      } catch (e) {
+        console.error('Failed to load student detail:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [studentId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   if (!student) return null;
 
-  const classroom = getClassroomName(student.classroomId);
-  const parentNames = getParentNames(student.id);
-  const studentParents = parents.filter(p => student.parentIds.includes(p.id));
-  const studentInvoices = invoices.filter(inv => inv.studentId === student.id);
-  const studentPayments = payments.filter(p => studentInvoices.some(inv => inv.id === p.invoiceId));
-  const studentAttendance = attendance.filter(a => a.studentId === student.id);
-  const studentGrades = grades.filter(g => g.studentId === student.id);
-  const studentAssessments = studentGrades.map(g => assessments.find(a => a.id === g.assessmentId)).filter(Boolean);
+  const classroom = classrooms.find(c => c.id === student.classroom_id)?.nom || 'Inconnu';
+  const studentInvoices = invoices.filter(inv => inv.student_id === student.id);
+  const studentPayments = payments.filter(p => studentInvoices.some(inv => inv.id === p.invoice_id));
+  const studentAttendance = attendance.filter(a => a.student_id === student.id);
+  const studentGrades = grades.filter(g => g.student_id === student.id);
 
   const avgGrade = studentGrades.length > 0
     ? (studentGrades.reduce((sum, g) => sum + g.note, 0) / studentGrades.length).toFixed(2)
     : '—';
 
-  const totalPaid = studentInvoices.reduce((sum, inv) => sum + inv.montantPaye, 0);
-  const totalDue = studentInvoices.reduce((sum, inv) => sum + inv.resteAPayer, 0);
+  const totalPaid = studentInvoices.reduce((sum, inv) => sum + inv.montant_paye, 0);
+  const totalDue = studentInvoices.reduce((sum, inv) => sum + inv.reste_a_payer, 0);
+
+  const getSubjectName = (id: string) => subjects.find(s => s.id === id)?.nom || 'Inconnu';
 
   const tabs = [
     { id: 'info', label: 'Informations', icon: GraduationCap },
@@ -81,7 +148,7 @@ export function StudentDetailContent({ studentId }: { studentId: string }) {
             <div className="flex flex-wrap gap-3 sm:gap-4 mt-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5 truncate">
                 <Calendar className="h-4 w-4 shrink-0" />
-                <span className="truncate">{new Date(student.dateNaissance).toLocaleDateString('fr-FR')}</span>
+                <span className="truncate">{new Date(student.date_naissance).toLocaleDateString('fr-FR')}</span>
               </span>
             </div>
           </div>
@@ -130,7 +197,7 @@ export function StudentDetailContent({ studentId }: { studentId: string }) {
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">Date de naissance</p>
-                <p className="text-sm text-foreground mt-0.5 truncate">{new Date(student.dateNaissance).toLocaleDateString('fr-FR')}</p>
+                <p className="text-sm text-foreground mt-0.5 truncate">{new Date(student.date_naissance).toLocaleDateString('fr-FR')}</p>
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">Matricule</p>
@@ -172,13 +239,13 @@ export function StudentDetailContent({ studentId }: { studentId: string }) {
             {studentGrades.length > 0 ? (
               <div className="space-y-1.5 max-h-[320px] overflow-y-auto scrollbar-thin">
                 {studentGrades.map(g => {
-                  const assessment = assessments.find(a => a.id === g.assessmentId);
+                  const assessment = assessments.find(a => a.id === g.assessment_id);
                   if (!assessment) return null;
                   return (
                     <div key={g.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-muted/50 transition-colors">
                       <div className="min-w-0">
                         <p className="text-sm text-foreground truncate">{assessment.libelle}</p>
-                        <p className="text-xs text-muted-foreground truncate">{getSubjectName(assessment.subjectId)} · Coef. {assessment.coefficient}</p>
+                        <p className="text-xs text-muted-foreground truncate">{getSubjectName(assessment.subject_id)} · Coef. {assessment.coefficient}</p>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <span className={cn(
@@ -204,11 +271,11 @@ export function StudentDetailContent({ studentId }: { studentId: string }) {
                 {studentInvoices.map(inv => (
                   <div key={inv.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-muted/50 transition-colors">
                     <div className="min-w-0">
-                      <p className="text-sm text-foreground capitalize truncate">{inv.typeFrais}</p>
-                      <p className="text-xs text-muted-foreground truncate">Émis le {new Date(inv.dateEmission).toLocaleDateString('fr-FR')}</p>
+                      <p className="text-sm text-foreground capitalize truncate">{inv.type_frais}</p>
+                      <p className="text-xs text-muted-foreground truncate">Émis le {new Date(inv.date_emission).toLocaleDateString('fr-FR')}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-medium text-foreground truncate">{formatMoney(inv.montantPaye)} / {formatMoney(inv.montantTotal)}</p>
+                      <p className="text-sm font-medium text-foreground truncate">{formatMoney(inv.montant_paye)} / {formatMoney(inv.montant_total)}</p>
                       <span className={cn(
                         'badge-modern',
                         inv.statut === 'paye' ? 'bg-success/10 text-success' :
@@ -232,7 +299,7 @@ export function StudentDetailContent({ studentId }: { studentId: string }) {
           <Card className="p-4 sm:p-5 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300">
             <h3 className="font-semibold text-foreground text-sm sm:text-base mb-4">Parents / Tuteurs</h3>
             <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin">
-              {studentParents.map(p => (
+              {parents.map(p => (
                 <div key={p.id} className="p-3 rounded-xl border border-border">
                   <p className="text-sm font-medium text-foreground truncate">{p.nom}</p>
                   <div className="mt-2 space-y-1.5">
@@ -246,7 +313,7 @@ export function StudentDetailContent({ studentId }: { studentId: string }) {
                   </div>
                 </div>
               ))}
-              {studentParents.length === 0 && (
+              {parents.length === 0 && (
                 <p className="text-sm text-muted-foreground">Aucun parent lié</p>
               )}
             </div>
@@ -255,17 +322,20 @@ export function StudentDetailContent({ studentId }: { studentId: string }) {
           <Card className="p-4 sm:p-5 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300">
             <h3 className="font-semibold text-foreground text-sm sm:text-base mb-4">Documents</h3>
             <div className="space-y-1.5 max-h-[280px] overflow-y-auto scrollbar-thin">
-              {student.documents.map(doc => (
+              {documents.map(doc => (
                 <div key={doc.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-info/10 shrink-0">
                     <FileText className="h-4 w-4 text-info" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground truncate">{doc.nom}</p>
-                    <p className="text-xs text-muted-foreground truncate">{doc.type} · {new Date(doc.dateAjout).toLocaleDateString('fr-FR')}</p>
+                    <p className="text-xs text-muted-foreground truncate">{doc.type} · {new Date(doc.date_ajout).toLocaleDateString('fr-FR')}</p>
                   </div>
                 </div>
               ))}
+              {documents.length === 0 && (
+                <p className="text-sm text-muted-foreground">Aucun document</p>
+              )}
             </div>
             <div className="mt-4 pt-4 border-t border-border space-y-2">
               <p className="text-xs font-medium text-foreground mb-2">Générer un document officiel</p>

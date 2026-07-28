@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { BarChart3, Download, Wallet, CheckSquare, ClipboardList, TrendingUp, TrendingDown, Users, FileText, Clock } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { BarChart3, Download, Wallet, CheckSquare, ClipboardList, TrendingUp, TrendingDown, Users, FileText, Clock, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
-import { invoices, payments, attendance, grades, students, classrooms, formatMoney, dashboardStats } from '@/lib/mock-data';
+import { fetchInvoices, fetchPayments, fetchAttendance, fetchGrades, fetchStudents, fetchClassrooms, formatMoney } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,17 +24,53 @@ export function ReportsContent() {
   const [dateFrom, setDateFrom] = useState('2026-09-01');
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
 
+  const [loading, setLoading] = useState(true);
+  const [invoices, setInvoices] = useState<Awaited<ReturnType<typeof fetchInvoices>>>([]);
+  const [payments, setPayments] = useState<Awaited<ReturnType<typeof fetchPayments>>>([]);
+  const [attendance, setAttendance] = useState<Awaited<ReturnType<typeof fetchAttendance>>>([]);
+  const [grades, setGrades] = useState<Awaited<ReturnType<typeof fetchGrades>>>([]);
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof fetchStudents>>>([]);
+  const [classrooms, setClassrooms] = useState<Awaited<ReturnType<typeof fetchClassrooms>>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [inv, pay, att, g, s, c] = await Promise.all([
+          fetchInvoices(),
+          fetchPayments(),
+          fetchAttendance(),
+          fetchGrades(),
+          fetchStudents(),
+          fetchClassrooms(),
+        ]);
+        if (cancelled) return;
+        setInvoices(inv);
+        setPayments(pay);
+        setAttendance(att);
+        setGrades(g);
+        setStudents(s);
+        setClassrooms(c);
+      } catch (e) {
+        console.error('Failed to load reports data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Financial data
-  const totalBilled = invoices.reduce((s, inv) => s + inv.montantTotal, 0);
-  const totalCollected = invoices.reduce((s, inv) => s + inv.montantPaye, 0);
-  const totalOutstanding = invoices.reduce((s, inv) => s + inv.resteAPayer, 0);
+  const totalBilled = invoices.reduce((s, inv) => s + inv.montant_total, 0);
+  const totalCollected = invoices.reduce((s, inv) => s + inv.montant_paye, 0);
+  const totalOutstanding = invoices.reduce((s, inv) => s + inv.reste_a_payer, 0);
   const collectionRate = totalBilled > 0 ? ((totalCollected / totalBilled) * 100).toFixed(1) : '0';
   const paidCount = invoices.filter(i => i.statut === 'paye').length;
   const partialCount = invoices.filter(i => i.statut === 'partiel').length;
   const unpaidCount = invoices.filter(i => i.statut === 'impaye').length;
 
   const paymentMethodData = ['especes', 'mobile_money', 'virement', 'cheque'].map(method => {
-    const methodPayments = payments.filter(p => p.modePaiement === method);
+    const methodPayments = payments.filter(p => p.mode_paiement === method);
     return {
       method: method === 'especes' ? 'Espèces' : method === 'mobile_money' ? 'Mobile Money' : method === 'virement' ? 'Virement' : 'Chèque',
       montant: methodPayments.reduce((s, p) => s + p.montant, 0),
@@ -44,7 +80,7 @@ export function ReportsContent() {
 
   // Attendance data
   const attendanceByClass = classrooms.map(c => {
-    const classAttendance = attendance.filter(a => a.classroomId === c.id);
+    const classAttendance = attendance.filter(a => a.classroom_id === c.id);
     return {
       classe: c.nom,
       present: classAttendance.filter(a => a.statut === 'present').length,
@@ -63,8 +99,8 @@ export function ReportsContent() {
 
   // Grades data
   const gradesByClass = classrooms.map(c => {
-    const classStudents = students.filter(s => s.classroomId === c.id);
-    const classGrades = grades.filter(g => classStudents.some(s => s.id === g.studentId));
+    const classStudents = students.filter(s => s.classroom_id === c.id);
+    const classGrades = grades.filter(g => classStudents.some(s => s.id === g.student_id));
     const avg = classGrades.length > 0
       ? (classGrades.reduce((sum, g) => sum + g.note, 0) / classGrades.length).toFixed(1)
       : '0';
@@ -75,6 +111,14 @@ export function ReportsContent() {
       : '0';
     return { classe: c.nom, moyenne: parseFloat(avg), max, min, passRate: parseInt(passRate), count: classGrades.length };
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
@@ -166,9 +210,9 @@ export function ReportsContent() {
               <h3 className="font-semibold text-foreground mb-4">Recettes mensuelles</h3>
               <div className="overflow-x-auto scrollbar-thin">
                 <ResponsiveContainer width="100%" height={280} minWidth={280}>
-                  <BarChart data={dashboardStats.recettesParMois}>
+                  <BarChart data={paymentMethodData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis dataKey="mois" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="method" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v / 1000000}M`} />
                     <Tooltip formatter={(v: number) => [formatMoney(v), 'Recettes']} contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
                     <Bar dataKey="montant" fill="#22c55e" radius={[4, 4, 0, 0]} />

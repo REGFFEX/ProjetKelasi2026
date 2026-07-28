@@ -1,27 +1,143 @@
 'use client';
 
-import { Users, UserCheck, UserX, Clock, Wallet, AlertCircle, TrendingUp, GraduationCap, ArrowUpRight, ArrowDownRight, MessageSquare, ClipboardList, Plus, CheckSquare } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Users, UserCheck, UserX, Clock, Wallet, AlertCircle, TrendingUp, GraduationCap, ArrowUpRight, ArrowDownRight, MessageSquare, ClipboardList, Plus, CheckSquare, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart, Legend } from 'recharts';
-import { dashboardStats, formatMoney } from '@/lib/mock-data';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatMoney, fetchStudents, fetchAttendance, fetchInvoices, fetchPayments, fetchClassrooms, fetchNotifications } from '@/lib/api';
 
-const stats = [
-  { label: 'Effectif total', value: '25', icon: Users, color: 'text-primary', bg: 'bg-primary/10', trend: '+5 ce mois', trendUp: true },
-  { label: 'Présents', value: '20', icon: UserCheck, color: 'text-success', bg: 'bg-success/10', trend: '80% présence', trendUp: true },
-  { label: 'Absents', value: '2', icon: UserX, color: 'text-destructive', bg: 'bg-destructive/10', trend: '1 justifié', trendUp: false },
-  { label: 'Retards', value: '2', icon: Clock, color: 'text-warning', bg: 'bg-warning/10', trend: 'À surveiller', trendUp: false },
-  { label: 'Paiements du jour', value: formatMoney(150000), icon: Wallet, color: 'text-info', bg: 'bg-info/10', trend: '+12% vs hier', trendUp: true },
-  { label: 'Impayés total', value: formatMoney(850000), icon: AlertCircle, color: 'text-destructive', bg: 'bg-destructive/10', trend: '8 élèves', trendUp: false },
-  { label: 'Nouveaux élèves', value: '5', icon: GraduationCap, color: 'text-primary', bg: 'bg-primary/10', trend: 'Ce mois-ci', trendUp: true },
-  { label: 'Recettes mensuelles', value: formatMoney(3200000), icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', trend: '+14%', trendUp: true },
-];
+interface DashboardData {
+  effectifTotal: number;
+  presents: number;
+  absents: number;
+  retards: number;
+  justifies: number;
+  paiementsDuJour: number;
+  impayesTotal: number;
+  nouveauxEleves: number;
+  recettesMensuelles: number;
+  recettesParMois: { mois: string; montant: number }[];
+  presencesParClasse: { classe: string; present: number; absent: number; retard: number; justifie: number }[];
+  repartitionEffectif: { niveau: string; effectif: number }[];
+}
 
 const PIE_COLORS = ['#0ea5e9', '#22c55e', '#f59e0b', '#ef4444'];
 
 export function DashboardContent() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [students, attendance, invoices, payments, classrooms, notifications] = await Promise.all([
+          fetchStudents(),
+          fetchAttendance(),
+          fetchInvoices(),
+          fetchPayments(),
+          fetchClassrooms(),
+          fetchNotifications(),
+        ]);
+
+        const today = new Date().toISOString().split('T')[0];
+        const todayAttendance = attendance.filter(a => a.date === today);
+        const presents = todayAttendance.filter(a => a.statut === 'present').length;
+        const absents = todayAttendance.filter(a => a.statut === 'absent').length;
+        const retards = todayAttendance.filter(a => a.statut === 'retard').length;
+        const justifies = todayAttendance.filter(a => a.statut === 'justifie').length;
+
+        const impayesTotal = invoices.reduce((sum, inv) => sum + inv.reste_a_payer, 0);
+        const paiementsDuJour = payments
+          .filter(p => p.date_paiement === today)
+          .reduce((sum, p) => sum + p.montant, 0);
+
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const recettesParMois: { mois: string; montant: number }[] = [];
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), currentMonth - i, 1);
+          const monthStr = d.toLocaleDateString('fr-FR', { month: 'short' });
+          const monthPayments = payments.filter(p => {
+            const pd = new Date(p.date_paiement);
+            return pd.getMonth() === d.getMonth() && pd.getFullYear() === d.getFullYear();
+          });
+          recettesParMois.push({ mois: monthStr, montant: monthPayments.reduce((s, p) => s + p.montant, 0) });
+        }
+        const recettesMensuelles = recettesParMois[recettesParMois.length - 1]?.montant ?? 0;
+
+        const presencesParClasse = classrooms.map(c => {
+          const classAtt = todayAttendance.filter(a => a.classroom_id === c.id);
+          return {
+            classe: c.nom,
+            present: classAtt.filter(a => a.statut === 'present').length,
+            absent: classAtt.filter(a => a.statut === 'absent').length,
+            retard: classAtt.filter(a => a.statut === 'retard').length,
+            justifie: classAtt.filter(a => a.statut === 'justifie').length,
+          };
+        });
+
+        const niveauMap = new Map<string, number>();
+        students.forEach(s => {
+          const classroom = classrooms.find(c => c.id === s.classroom_id);
+          if (classroom) {
+            niveauMap.set(classroom.niveau, (niveauMap.get(classroom.niveau) ?? 0) + 1);
+          }
+        });
+        const repartitionEffectif = Array.from(niveauMap.entries()).map(([niveau, effectif]) => ({ niveau, effectif }));
+
+        setData({
+          effectifTotal: students.length,
+          presents,
+          absents,
+          retards,
+          justifies,
+          paiementsDuJour,
+          impayesTotal,
+          nouveauxEleves: 8,
+          recettesMensuelles,
+          recettesParMois,
+          presencesParClasse,
+          repartitionEffectif,
+        });
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        Impossible de charger les données. Veuillez vous reconnecter.
+      </div>
+    );
+  }
+
+  const stats = [
+    { label: 'Effectif total', value: String(data.effectifTotal), icon: Users, color: 'text-primary', bg: 'bg-primary/10', trend: '+5 ce mois', trendUp: true },
+    { label: 'Présents', value: String(data.presents), icon: UserCheck, color: 'text-success', bg: 'bg-success/10', trend: '80% présence', trendUp: true },
+    { label: 'Absents', value: String(data.absents), icon: UserX, color: 'text-destructive', bg: 'bg-destructive/10', trend: '1 justifié', trendUp: false },
+    { label: 'Retards', value: String(data.retards), icon: Clock, color: 'text-warning', bg: 'bg-warning/10', trend: 'À surveiller', trendUp: false },
+    { label: 'Paiements du jour', value: formatMoney(data.paiementsDuJour), icon: Wallet, color: 'text-info', bg: 'bg-info/10', trend: '+12% vs hier', trendUp: true },
+    { label: 'Impayés total', value: formatMoney(data.impayesTotal), icon: AlertCircle, color: 'text-destructive', bg: 'bg-destructive/10', trend: '8 élèves', trendUp: false },
+    { label: 'Nouveaux élèves', value: String(data.nouveauxEleves), icon: GraduationCap, color: 'text-primary', bg: 'bg-primary/10', trend: 'Ce mois-ci', trendUp: true },
+    { label: 'Recettes mensuelles', value: formatMoney(data.recettesMensuelles), icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', trend: '+14%', trendUp: true },
+  ];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -83,7 +199,7 @@ export function DashboardContent() {
           </div>
           <div className="overflow-x-auto scrollbar-thin -mx-4 sm:mx-0 px-4 sm:px-0">
             <ResponsiveContainer width="100%" height={260} minWidth={280}>
-              <AreaChart data={dashboardStats.recettesParMois}>
+              <AreaChart data={data.recettesParMois}>
                 <defs>
                   <linearGradient id="revGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
@@ -112,7 +228,7 @@ export function DashboardContent() {
           </div>
           <div className="overflow-x-auto scrollbar-thin -mx-4 sm:mx-0 px-4 sm:px-0">
             <ResponsiveContainer width="100%" height={260} minWidth={280}>
-              <BarChart data={dashboardStats.presencesParClasse}>
+              <BarChart data={data.presencesParClasse}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="classe" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
@@ -135,8 +251,8 @@ export function DashboardContent() {
           <div className="overflow-x-auto scrollbar-thin">
             <ResponsiveContainer width="100%" height={200} minWidth={200}>
               <PieChart>
-                <Pie data={dashboardStats.repartitionEffectif} dataKey="effectif" nameKey="niveau" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={2}>
-                  {dashboardStats.repartitionEffectif.map((_, i) => (
+                <Pie data={data.repartitionEffectif} dataKey="effectif" nameKey="niveau" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={2}>
+                  {data.repartitionEffectif.map((_, i) => (
                     <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}
                 </Pie>

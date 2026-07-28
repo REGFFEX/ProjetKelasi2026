@@ -1,19 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { GraduationCap, Mail, Lock, User, Phone, Building2, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { schools } from '@/lib/mock-data';
+import { GraduationCap, Mail, Lock, User, Phone, Building2, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import type { Role } from '@/lib/types';
 import { roleLabels } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
+import { fetchSchools } from '@/lib/api';
 
 const roles: Role[] = ['school_admin', 'secretary', 'accountant', 'teacher', 'parent'];
 
+interface SchoolOption {
+  id: string;
+  nom: string;
+}
+
 export default function SignUpPage() {
   const router = useRouter();
+  const { signUp } = useAuth();
   const [step, setStep] = useState<1 | 2>(1);
+  const [schoolOptions, setSchoolOptions] = useState<SchoolOption[]>([]);
   const [formData, setFormData] = useState({
     nom: '',
     email: '',
@@ -21,12 +29,22 @@ export default function SignUpPage() {
     password: '',
     confirmPassword: '',
     role: 'parent' as Role,
-    schoolId: 's1',
+    schoolId: '',
     acceptTerms: false,
   });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchSchools().then(schools => {
+      setSchoolOptions(schools.map(s => ({ id: s.id, nom: s.nom })));
+      if (schools.length > 0 && !formData.schoolId) {
+        setFormData(prev => ({ ...prev, schoolId: schools[0].id }));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
       setError('Les mots de passe ne correspondent pas');
@@ -36,7 +54,22 @@ export default function SignUpPage() {
       setError('Veuillez accepter les conditions d\'utilisation');
       return;
     }
-    router.push('/');
+    setLoading(true);
+    setError('');
+    const { error: signUpError } = await signUp(
+      formData.email,
+      formData.password,
+      formData.nom,
+      formData.telephone,
+      formData.role,
+      formData.schoolId,
+    );
+    if (signUpError) {
+      setError(signUpError);
+      setLoading(false);
+    } else {
+      router.push('/');
+    }
   };
 
   return (
@@ -223,7 +256,7 @@ export default function SignUpPage() {
                       onChange={e => setFormData({ ...formData, schoolId: e.target.value })}
                       className="w-full rounded-xl border border-input bg-muted/30 pl-10 pr-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15 transition-all"
                     >
-                      {schools.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+                      {schoolOptions.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
                     </select>
                   </div>
                 </div>
@@ -254,9 +287,10 @@ export default function SignUpPage() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.97] shadow-lg shadow-primary/20"
+                    disabled={loading}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.97] shadow-lg shadow-primary/20 disabled:opacity-60"
                   >
-                    Créer mon compte
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Créer mon compte'}
                   </button>
                 </div>
               </>

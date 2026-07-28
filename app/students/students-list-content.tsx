@@ -1,14 +1,40 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Plus, Filter, Download, Upload, X, FileSpreadsheet, CheckCircle, AlertCircle, Eye, Pencil, Trash2, GraduationCap } from 'lucide-react';
-import { students, classrooms, getStudentName, getParentNames } from '@/lib/mock-data';
+import { Search, Plus, Filter, Download, Upload, X, FileSpreadsheet, CheckCircle, AlertCircle, Eye, Pencil, Trash2, GraduationCap, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { fetchStudents, fetchClassrooms, fetchParents, fetchAllStudentParents } from '@/lib/api';
+
+interface StudentRow {
+  id: string;
+  matricule: string;
+  nom: string;
+  prenom: string;
+  date_naissance: string;
+  classroom_id: string | null;
+  statut: string;
+}
+
+interface ClassroomRow {
+  id: string;
+  nom: string;
+  niveau: string;
+}
+
+interface ParentRow {
+  id: string;
+  nom: string;
+}
+
+interface StudentParentRow {
+  student_id: string;
+  parent_id: string;
+}
 
 export function StudentsListContent() {
   const [search, setSearch] = useState('');
@@ -16,16 +42,58 @@ export function StudentsListContent() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [classrooms, setClassrooms] = useState<ClassroomRow[]>([]);
+  const [parents, setParents] = useState<ParentRow[]>([]);
+  const [studentParents, setStudentParents] = useState<StudentParentRow[]>([]);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [s, c, p, sp] = await Promise.all([
+          fetchStudents(),
+          fetchClassrooms(),
+          fetchParents(),
+          fetchAllStudentParents(),
+        ]);
+        setStudents(s as StudentRow[]);
+        setClassrooms(c as ClassroomRow[]);
+        setParents(p as ParentRow[]);
+        setStudentParents(sp as unknown as StudentParentRow[]);
+      } catch (err) {
+        console.error('Students load error:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const getParentNames = (studentId: string): string[] => {
+    const parentIds = studentParents.filter(sp => sp.student_id === studentId).map(sp => sp.parent_id);
+    return parentIds
+      .map(pid => parents.find(p => p.id === pid)?.nom)
+      .filter((n): n is string => !!n);
+  };
 
   const filtered = useMemo(() => {
     return students.filter(s => {
-      const name = getStudentName(s.id).toLowerCase();
-      const matchSearch = name.includes(search.toLowerCase()) || s.matricule.toLowerCase().includes(search.toLowerCase());
-      const matchClass = classFilter === 'all' || s.classroomId === classFilter;
+      const fullName = `${s.prenom} ${s.nom}`.toLowerCase();
+      const matchSearch = fullName.includes(search.toLowerCase()) || s.matricule.toLowerCase().includes(search.toLowerCase());
+      const matchClass = classFilter === 'all' || s.classroom_id === classFilter;
       const matchStatus = statusFilter === 'all' || s.statut === statusFilter;
       return matchSearch && matchClass && matchStatus;
     });
-  }, [search, classFilter, statusFilter]);
+  }, [students, search, classFilter, statusFilter]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 sm:space-y-6 animate-fade-in">
@@ -92,7 +160,7 @@ export function StudentsListContent() {
         </div>
       )}
 
-      {/* Table — desktop with horizontal scroll */}
+      {/* Table — desktop */}
       <Card className="hidden md:block overflow-hidden shadow-card">
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full min-w-[640px]">
@@ -108,7 +176,7 @@ export function StudentsListContent() {
             </thead>
             <tbody className="divide-y divide-border">
               {filtered.map(s => {
-                const classroom = classrooms.find(c => c.id === s.classroomId);
+                const classroom = classrooms.find(c => c.id === s.classroom_id);
                 const parentNames = getParentNames(s.id);
                 return (
                   <tr key={s.id} className="hover:bg-muted/30 transition-colors">
@@ -121,7 +189,7 @@ export function StudentsListContent() {
                           <Link href={`/students/${s.id}`} className="text-sm font-medium text-foreground hover:text-primary truncate block max-w-[180px]">
                             {s.prenom} {s.nom}
                           </Link>
-                          <p className="text-xs text-muted-foreground truncate">Né(e) le {new Date(s.dateNaissance).toLocaleDateString('fr-FR')}</p>
+                          <p className="text-xs text-muted-foreground truncate">Né(e) le {new Date(s.date_naissance).toLocaleDateString('fr-FR')}</p>
                         </div>
                       </div>
                     </td>
@@ -167,7 +235,7 @@ export function StudentsListContent() {
       {/* Cards — mobile */}
       <div className="md:hidden space-y-3">
         {filtered.map(s => {
-          const classroom = classrooms.find(c => c.id === s.classroomId);
+          const classroom = classrooms.find(c => c.id === s.classroom_id);
           const parentNames = getParentNames(s.id);
           return (
             <Card key={s.id} className="p-4 shadow-card">

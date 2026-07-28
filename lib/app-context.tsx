@@ -1,14 +1,12 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useMemo } from 'react';
 import type { Role } from './types';
-import { currentUser, schools } from './mock-data';
+import { useAuth } from './auth-context';
 
 interface AppContextValue {
   role: Role;
-  setRole: (r: Role) => void;
   schoolId: string;
-  setSchoolId: (id: string) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }
@@ -16,15 +14,16 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<Role>(currentUser.role);
-  const [schoolId, setSchoolId] = useState<string>(schools[0].id);
+  const { profile } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  return (
-    <AppContext.Provider value={{ role, setRole, schoolId, setSchoolId, sidebarOpen, setSidebarOpen }}>
-      {children}
-    </AppContext.Provider>
-  );
+  // Role is locked from the auth profile — never client-side mutable
+  const role = profile?.role ?? 'parent';
+  const schoolId = profile?.school_id ?? '';
+
+  const value = useMemo(() => ({ role, schoolId, sidebarOpen, setSidebarOpen }), [role, schoolId, sidebarOpen]);
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {

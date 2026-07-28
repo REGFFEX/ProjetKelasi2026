@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { CheckSquare, Check, X, Clock, FileText, Save, ChevronLeft, ChevronRight } from 'lucide-react';
-import { students, classrooms, attendance as initialAttendance, getParentNames } from '@/lib/mock-data';
+import { useState, useEffect, useMemo } from 'react';
+import { CheckSquare, Check, X, Clock, FileText, Save, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { fetchStudents, fetchClassrooms, fetchAttendance, fetchParents, fetchAllStudentParents } from '@/lib/api';
 import type { AttendanceStatus } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,20 +18,63 @@ const statusConfig: Record<AttendanceStatus, { label: string; icon: typeof Check
 const statuses: AttendanceStatus[] = ['present', 'absent', 'retard', 'justifie'];
 
 export function AttendanceContent() {
-  const [selectedClass, setSelectedClass] = useState(classrooms[0].id);
+  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<Awaited<ReturnType<typeof fetchStudents>>>([]);
+  const [classrooms, setClassrooms] = useState<Awaited<ReturnType<typeof fetchClassrooms>>>([]);
+  const [parents, setParents] = useState<Awaited<ReturnType<typeof fetchParents>>>([]);
+  const [studentParents, setStudentParents] = useState<{ id: string; school_id: string; student_id: string; parent_id: string }[]>([]);
+  const [existingAttendance, setExistingAttendance] = useState<Awaited<ReturnType<typeof fetchAttendance>>>([]);
+
+  const [selectedClass, setSelectedClass] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [attendanceState, setAttendanceState] = useState<Record<string, AttendanceStatus>>(() => {
-    const state: Record<string, AttendanceStatus> = {};
-    initialAttendance.forEach(a => {
-      state[a.studentId] = a.statut;
-    });
-    return state;
-  });
+  const [attendanceState, setAttendanceState] = useState<Record<string, AttendanceStatus>>({});
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, c, p, sp, att] = await Promise.all([
+          fetchStudents(),
+          fetchClassrooms(),
+          fetchParents(),
+          fetchAllStudentParents(),
+          fetchAttendance(),
+        ]);
+        if (cancelled) return;
+        setStudents(s);
+        setClassrooms(c);
+        setParents(p);
+        setStudentParents(sp);
+        setExistingAttendance(att);
+        if (c.length > 0) setSelectedClass(c[0].id);
+        // Initialize attendance state from fetched data
+        const state: Record<string, AttendanceStatus> = {};
+        att.forEach(a => {
+          state[a.student_id] = a.statut as AttendanceStatus;
+        });
+        setAttendanceState(state);
+      } catch (e) {
+        console.error('Failed to load attendance data:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const classStudents = useMemo(() => {
-    return students.filter(s => s.classroomId === selectedClass);
-  }, [selectedClass]);
+    return students.filter(s => s.classroom_id === selectedClass);
+  }, [students, selectedClass]);
+
+  const getParentNames = (studentId: string): string[] => {
+    const parentIds = studentParents
+      .filter(sp => sp.student_id === studentId)
+      .map(sp => sp.parent_id);
+    return parentIds
+      .map(pid => parents.find(p => p.id === pid)?.nom || 'Inconnu')
+      .filter(Boolean);
+  };
 
   const setStatus = (studentId: string, status: AttendanceStatus) => {
     setAttendanceState(prev => ({ ...prev, [studentId]: status }));
@@ -58,6 +101,14 @@ export function AttendanceContent() {
     });
     return counts;
   }, [classStudents, attendanceState]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in">
